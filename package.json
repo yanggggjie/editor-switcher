@@ -22,7 +22,8 @@
       "editor/context": [
         {
           "command": "editor-switcher.openInWebstorm",
-          "group": "navigation@1"
+          "group": "navigation@1",
+          "when": "editorIsOpen"
         }
       ],
       "explorer/context": [

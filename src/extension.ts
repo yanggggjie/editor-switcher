@@ -1,6 +1,8 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 import { exec } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
 import * as vscode from "vscode";
 
 // This method is called when your extension is activated
@@ -12,16 +14,10 @@ export function activate(context: vscode.ExtensionContext) {
     'Congratulations, your extension "editor-switcher" is now active!'
   );
 
-  // 注册编辑器上下文菜单命令
+  // 注册命令
   const disposable = vscode.commands.registerCommand(
     "editor-switcher.openInWebstorm",
     (uri: vscode.Uri) => {
-      // 获取当前活动的文本编辑器
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) {
-        return;
-      }
-
       // 获取当前工作区根路径
       const workspacePath = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
       if (!workspacePath) {
@@ -29,46 +25,60 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      // 获取当前文件相对路径
-      const filePath = uri.fsPath;
+      // 如果是从编辑器中调用，使用当前光标位置
+      const editor = vscode.window.activeTextEditor;
+      if (editor && editor.document.uri.fsPath === uri.fsPath) {
+        const position = editor.selection.active;
+        const line = position.line + 1;
+        const column = position.character + 1;
 
-      // 获取当前光标位置
-      const position = editor.selection.active;
-      const line = position.line + 1; // VSCode 是从0开始计数，WebStorm 从1开始
-      const column = position.character + 1;
-
-      // 构建 WebStorm URL
-      const url = `webstorm://open?file=${filePath}&line=${line}&column=${column}`;
-
-      // 根据操作系统执行不同的命令
-      let command = "";
-      switch (process.platform) {
-        case "darwin": // macOS
-          command = `open "${url}"`;
-          break;
-        case "win32": // Windows
-          command = `start "${url}"`;
-          break;
-        case "linux": // Linux
-          command = `xdg-open "${url}"`;
-          break;
-        default:
-          vscode.window.showErrorMessage("Unsupported operating system");
-          return;
-      }
-
-      // 执行命令
-      exec(command, (error) => {
-        if (error) {
-          vscode.window.showErrorMessage(
-            `Failed to open WebStorm: ${error.message}`
-          );
+        const relativePath = path.relative(workspacePath, uri.fsPath);
+        const url = `webstorm://open?project=${workspacePath}&file=${workspacePath}/${relativePath}&line=${line}&column=${column}`;
+        openWithCommand(url);
+      } else {
+        // 检查是否是目录
+        const stats = fs.statSync(uri.fsPath);
+        if (stats.isDirectory()) {
+          // 如果是目录，只打开项目
+          const url = `webstorm://open?project=${workspacePath}`;
+          openWithCommand(url);
+        } else {
+          // 如果是文件，打开具体文件
+          const relativePath = path.relative(workspacePath, uri.fsPath);
+          const url = `webstorm://open?project=${workspacePath}&file=${workspacePath}/${relativePath}`;
+          openWithCommand(url);
         }
-      });
+      }
     }
   );
 
   context.subscriptions.push(disposable);
+}
+
+function openWithCommand(url: string) {
+  let command = "";
+  switch (process.platform) {
+    case "darwin":
+      command = `open "${url}"`;
+      break;
+    case "win32":
+      command = `start "${url}"`;
+      break;
+    case "linux":
+      command = `xdg-open "${url}"`;
+      break;
+    default:
+      vscode.window.showErrorMessage("Unsupported operating system");
+      return;
+  }
+
+  exec(command, (error) => {
+    if (error) {
+      vscode.window.showErrorMessage(
+        `Failed to open WebStorm: ${error.message}`
+      );
+    }
+  });
 }
 
 // This method is called when your extension is deactivated
